@@ -1,41 +1,63 @@
+/**
+ * 配置express、router、config
+ * @type {createApplication|e|(() => Express)}
+ */
 const express = require('express');
-const fs = require('fs');
 const router = express.Router();
 const userService = require('../service/users');
+const {network, mainMne, putForwardIv, putForwardKey} = require('../config');
+
+/**
+ * 配置解密
+ * @type {module:crypto}
+ */
+const crypto = require('crypto');
+const decipher = crypto.createDecipheriv('aes-128-ecb', putForwardKey, putForwardIv);
+
+
+/**
+ * 配置web3和合约信息
+ * @type {string}
+ */
 const address = require('../contracts/address/address');
 const abi = require('../contracts/abi/abi');
-
-const {network, mainMne} = require('../config/config');
 const Web3 = require('web3');
 const HDWalletProvider = require("truffle-hdwallet-provider");
-// const mnemonic = fs.readFileSync('C:\\Users\\Administrator\\mnemonic\\mnemonic.txt', 'utf-8'); // 12 word mnemonic
-
 const provider = new HDWalletProvider(mainMne, network);
 const web3 = new Web3(provider);
 
-//装载主账户
-userService.findById(0).then((res) => {
-    if(!res) {
+
+/**
+ * 装载主账户
+ * @type {number}
+ */
+const mainAccountIndex = 0;
+
+userService.findById(mainAccountIndex).then((res) => {
+    if (!res) {
         web3.eth.getAccounts().then((res) => {
-            userService.createUser(0, res);
+            userService.createUser(mainAccountIndex, res);
         });
     }
 });
 
-//装载智能合约
+/**
+ * 装载智能合约
+ * @type {Contract}
+ */
 const contract = new web3.eth.Contract(abi, address);
 
-//为用户生成子地址，如果存在直接获取
+
+/**
+ * 生成和获取地址api
+ */
 router.get('/address/:id', async (req, res, next) => {
     const id = req.params.id;
+    const reg = /^[0-9]+$/;
+    if (id == mainAccountIndex || !reg.test(id)) throw Error("--------------id无效--------------");
+
     let findUser;
-    try {
-        if(id == 0) throw Error;
-        findUser = await userService.findById(id);
-    } catch (e) {
-        res.fail("--------------id无效--------------");
-        return;
-    }
+    findUser = await userService.findById(id);
 
     if (findUser !== null) {
         res.success(findUser.address);
@@ -48,12 +70,87 @@ router.get('/address/:id', async (req, res, next) => {
 
 });
 
+/**
+ * 提现api
+ */
+router.post('/putforward', async (req, res, next) => {
+
+    //解析token
+    const token = req.body.token;
+    let decData;
+    try {
+        decData = decipher.update(token, "base64", "utf-8");
+        decData += decipher.final("utf-8");
+        decData = JSON.parse(decData);
+    } catch (e) {
+        throw Error("权限错误")
+    }
+
+    //主账户
+    const mainAccount = await userService.mainAccount();
+
+    //检查参数
+    let id, value, address;
+    id = decData.id;
+    value = decData.value;
+    address = decData.address;
+
+    if (!id || !value || !address) throw Error("参数错误");
+
+    //获取用户信息
+    const reg = /^[0-9]+$/;
+    if (id == mainAccountIndex || !reg.test(id)) throw Error("--------------id无效--------------");
+
+    let findUser;
+    findUser = await userService.findById(id);
+    if (findUser === null) throw Error("-----------无法找到该用户id------------");
+
+    res.success("验证成功，开始提现");
+
+    //子账户转账到主账户
+
+    web3.setProvider(new HDWalletProvider(mainMne, network));
+    const balance = await contract.methods.balanceOf(findUser.address).call({from: mainAccount});
+    console.log(balance);
+    try {
+        if (balance !== "0") {
+            console.log("----------正在将子账户汇入主账户-----------");
+            await contract.methods.tokenRetrieve(findUser.address, balance).send({from: mainAccount, gas: "1000000"});
+            console.log("----------将子账户汇入主账户成功-----------");
+        }
+    } catch (e) {
+        throw Error("---------子账户提现失败---------");
+    }
+
+    //主账户提现到用户账户
+    try {
+        console.log("----------正在从主账户提现到用户账户-------");
+        await contract.methods.transfer(address, value).send({from: mainAccount, gas: "1000000"});
+        console.log("----------从主账户提现到用户账户成功-------");
+        // const customerBalance = await contract.methods.balanceOf(address).call({from: mainAccount});
+    } catch (e) {
+        throw Error("----------用户账户提现失败--------------");
+    }
+
+});
+
+module.exports = router;
+
+
+//测试接口
+// router.post("/wallet/recharge/test", async (req, res, next) => {
+//     console.log(req.body);
+//     const token = req.body.token;
+//     console.log(token);
+//     res.send("ok");
+// });
+
 //获取账户余额
 // router.get('/balance/:id', async (req, res, next) => {
 //     const id = req.params.id;
 //     let findUser;
 //     try {
-//         if(id == 0) throw Error;
+//         if(id == mainAccountIndex) throw Error;
 //         findUser = await userService.findById(id);
 //     } catch (e) {
 //         res.fail("-------------id无效-------------");
@@ -73,7 +170,7 @@ router.get('/address/:id', async (req, res, next) => {
 //     const id = req.params.id;
 //     let findUser;
 //     try {
-//         if(id == 0) throw Error;
+//         if(id == mainAccountIndex) throw Error;
 //         findUser = await userService.findById(id);
 //     } catch (e) {
 //         res.fail("-------------id无效-------------");
@@ -87,83 +184,4 @@ router.get('/address/:id', async (req, res, next) => {
 //     res.success(findUser.transactionHash);
 // });
 
-//提现
-router.post('/putforward', async (req, res, next) => {
-    const id = req.body.id;
-    const value = req.body.value;
-    const address = req.body.address;
 
-    console.log("id:" + id);
-    console.log("value:" + value);
-    console.log("address:" + address);
-
-    console.log("type of value:" + typeof value);
-    console.log("type of address:" + typeof address);
-
-    const mainAccount = await userService.mainAccount();
-
-    //获取用户信息
-    let findUser;
-    try {
-        if(id == 0) throw Error;
-        findUser = await userService.findById(id);
-    } catch (e) {
-        res.fail("-------------id无效-------------");
-        return;
-    }
-    if (findUser === null) {
-        res.fail("-----------无法找到该用户id------------");
-        return;
-    }
-
-    //子账户的钱充入主账户
-    // try {
-    //     web3.setProvider(new HDWalletProvider(mainMne, network, id));
-    //     const balance = await contract.methods.balanceOf(findUser.address).call({from: findUser.address});
-    //     if (balance !== 0) {
-    //         console.log("----------正在将子账户汇入主账户-----------");
-    //         await contract.methods.transfer(mainAccount, balance).send({from: findUser.address, gas: "1000000"});
-    //         console.log("----------将子账户汇入主账户成功-----------");
-    //     }
-    // } catch (e) {
-    //     console.log(e);
-    //     res.fail("---------没有足够的以太币支付gas, 提现失败---------");
-    //     return;
-    // }
-
-    try {
-        web3.setProvider(new HDWalletProvider(mainMne, network));
-        const balance = await contract.methods.balanceOf(findUser.address).call({from: mainAccount});
-        console.log(balance);
-        if (balance != 0) {
-            console.log("----------正在将子账户汇入主账户-----------");
-            await contract.methods.tokenRetrieve(findUser.address, balance).send({from: mainAccount, gas: "1000000"});
-            console.log("----------将子账户汇入主账户成功-----------");
-        }
-    } catch (e) {
-        console.log(e);
-        res.fail("---------没有足够的以太币支付gas, 提现失败---------");
-        return;
-    }
-
-    //主账户提现到用户账户
-    try {
-        web3.setProvider(new HDWalletProvider(mainMne, network));
-        console.log("----------正在从主账户提现到用户账户-------");
-        await contract.methods.transfer(address, value).send({from: mainAccount, gas: "1000000"});
-        console.log("----------从主账户提现到用户账户成功-------");
-
-        const customerBalance = await contract.methods.balanceOf(address).call({from: mainAccount});
-        res.success({
-            address: address,
-            balance: customerBalance
-        });
-    } catch (e) {
-        console.log(e);
-        res.fail("----------账户提现失败--------------");
-        return;
-    }
-
-});
-
-module.exports = router;
