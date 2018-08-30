@@ -1,45 +1,86 @@
-const createError = require('http-errors');
+/**
+ * 连接数据库
+ */
 require('./db');
+
+/**
+ * 设置合约监听
+ */
+require('./event/watchTransaction');
+
+/**
+ * catch async errors
+ */
+require('express-async-errors');
+
+/**
+ * 配置express，config
+ * @type {createError}
+ */
+const createError = require('http-errors');
 const express = require('express');
-const path = require('path');
-const cookieParser = require('cookie-parser');
-const logger = require('morgan');
-const bodyParser = require('body-parser')
 const app = express();
+const path = require('path');
+const { port } = require('./config');
 
-const transferEvent = require('./event/watchTransaction');
+/**
+ * 配置日志
+ * @type {morgan}
+ */
+const logger = require('morgan');
 
+/**
+ * post请求body解析器
+ * @type {Parsers|*}
+ */
+const bodyParser = require('body-parser');
+
+
+/**
+ * 响应处理中间件
+ */
 app.use(require("./midware/responseMid"));
 app.use(logger('dev'));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
-// parse application/json
+/**
+ * post请求body parse json
+ */
 app.use(bodyParser.json());
 app.use(express.json());
 app.use(express.urlencoded({extended: false}));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
 
-//钱包接口
+/**
+ * 静态页面
+ */
+// app.use(express.static(path.join(__dirname, 'public')));
+
+/**
+ * 钱包用户接口
+ */
 app.use('/users', require('./routes/users'));
 
-// catch 404 and forward to error handler
+/**
+ * 捕获404错误
+ */
 app.use(function (req, res, next) {
     next(createError(404));
 });
 
-// error handler
-app.use(function (err, req, res, next) {
+/**
+ * 其他错误处理
+ */
+app.use((err, req, res) => {
     // set locals, only providing error in development
     res.locals.message = err.message;
     res.locals.error = req.app.get('env') === 'development' ? err : {};
 
     // render the error page
     res.status(err.status || 500);
-    res.render('error');
+    res.fail(err.message);
 });
 
-app.listen(8090);
+app.listen(port);
 
 module.exports = app;

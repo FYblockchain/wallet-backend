@@ -1,11 +1,11 @@
 const fs = require('fs');
 
 const {interface, bytecode} = require('./compile');
-const {network} = require('../config/config');
+const {network, mainMne} = require('../config');
 const HDWalletProvider = require("truffle-hdwallet-provider");
 // const mnemonic = fs.readFileSync('', 'utf-8'); // 12 word mnemonic
 
-const provider = new HDWalletProvider("vibrant creek tunnel differ guilt unusual display kit bone father enrich shuffle", network);
+const provider = new HDWalletProvider(mainMne, network);
 const Web3 = require('web3');
 
 const web3 = new Web3(provider);
