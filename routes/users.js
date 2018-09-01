@@ -7,13 +7,14 @@ const router = express.Router();
 const userService = require('../service/users');
 const txService = require('../service/transactions');
 const fetch = require('node-fetch');
-const {network, mainMne, putForwardIv, putForwardKey, sendTransactionKey, sendTransactionIv} = require('../config');
+const { network, mainMne, putForwardIv, putForwardKey, sendTransactionKey, sendTransactionIv } = require('../config');
+const { putForwardApi } = require('../interface');
 
 /**
  * 配置加解密
  * @type {module:crypto}
  */
-const crypto = require('crypto');
+const crypto = require('../utils/crypto');
 const random = require('../utils/randomUtil');
 /**
  * 配置web3和合约信息
@@ -98,10 +99,13 @@ router.post("/transactions", async (req, res, next) =>{
     //解密token
     const token = req.body.token;
 
-    let decipher = crypto.createDecipheriv('aes-128-ecb', sendTransactionKey, sendTransactionIv);
-    let decData = decipher.update(token, "base64", "utf-8");
-    decData += decipher.final();
-    decData = JSON.parse(decData);
+    let decData;
+    try {
+        decData = crypto.decrypt(token, sendTransactionKey, sendTransactionIv);
+        decData = JSON.parse(decData);
+    } catch (e) {
+        throw Error("权限错误")
+    }
 
     //获取参数
     let transactionHash, address, value;
@@ -124,10 +128,13 @@ router.post("/transactions/commit", async (req, res, next) =>{
 
     //解密token
     const token = req.body.token;
-    let decipher = crypto.createDecipheriv('aes-128-ecb', sendTransactionKey, sendTransactionIv);
-    let decData = decipher.update(token, "base64", "utf-8");
-    decData += decipher.final();
-    decData = JSON.parse(decData);
+    let decData;
+    try {
+        decData = crypto.decrypt(token, sendTransactionKey, sendTransactionIv);
+        decData = JSON.parse(decData);
+    } catch (e) {
+        throw Error("权限错误")
+    }
 
     //获取参数
     let transactionHash, address;
@@ -157,11 +164,9 @@ router.post('/putforward', async (req, res, next) => {
 
     //解析token
     const token = req.body.token;
-    const decipher = crypto.createDecipheriv('aes-128-ecb', putForwardKey, putForwardIv);
     let decData;
     try {
-        decData = decipher.update(token, "base64", "utf-8");
-        decData += decipher.final("utf-8");
+        decData = crypto.decrypt(token, putForwardKey, putForwardIv);
         decData = JSON.parse(decData);
     } catch (e) {
         throw Error("权限错误")
@@ -187,10 +192,7 @@ router.post('/putforward', async (req, res, next) => {
     if (findUser === null) throw Error("-----------无法找到该用户id------------");
 
     //用户提现信息加密
-    const cipher = crypto.createCipheriv('aes-128-ecb', putForwardKey, putForwardIv);
-
-    let newToken = cipher.update(JSON.stringify({timestamp: (Date.now() + random.generateRandom()), address: address, value: value}), "utf-8", "base64");
-    newToken += cipher.final("base64");
+    const newToken = crypto.encrypt(JSON.stringify({timestamp: (Date.now() + random.generateRandom()), address: address, value: value}), putForwardKey, putForwardIv);
     res.success({token: newToken});
 
 
@@ -218,7 +220,7 @@ router.post('/putforward', async (req, res, next) => {
         throw Error("----------用户账户提现失败--------------");
     }
 
-    fetch("http://192.168.31.154/index.php/purse/cash", {
+    fetch(putForwardApi, {
         method: 'POST',
         body: JSON.stringify({token: newToken}),
         headers: {'Content-Type': 'application/json'}
@@ -232,51 +234,6 @@ router.post('/putforward', async (req, res, next) => {
 
 module.exports = router;
 
-//测试接口
-// router.post("/wallet/recharge/test", async (req, res, next) => {
-//     console.log(req.body);
-//     const token = req.body.token;
-//     console.log(token);
-//     res.send("ok");
-// });
 
-//获取账户余额
-// router.get('/balance/:id', async (req, res, next) => {
-//     const id = req.params.id;
-//     let findUser;
-//     try {
-//         if(id == mainAccountIndex) throw Error;
-//         findUser = await userService.findById(id);
-//     } catch (e) {
-//         res.fail("-------------id无效-------------");
-//         return;
-//     }
-//
-//     if (findUser === null) {
-//         res.fail("-----------无法找到该用户id------------");
-//         return;
-//     }
-//     const userBalance = await contract.methods.balanceOf(findUser.address).call({from: findUser.address});
-//     res.success(userBalance);
-// });
-
-//用户的交易信息
-// router.get('/transactions/:id', async (req, res, next) => {
-//     const id = req.params.id;
-//     let findUser;
-//     try {
-//         if(id == mainAccountIndex) throw Error;
-//         findUser = await userService.findById(id);
-//     } catch (e) {
-//         res.fail("-------------id无效-------------");
-//         return;
-//     }
-//
-//     if (findUser === null) {
-//         res.fail("-----------无法找到该用户id------------");
-//         return;
-//     }
-//     res.success(findUser.transactionHash);
-// });
 
 

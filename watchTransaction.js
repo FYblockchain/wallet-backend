@@ -11,9 +11,11 @@ const userService = require("./service/users");
 const txService = require("./service/transactions");
 
 const {rechargeKey, rechargeIv, wsnetwork} = require('./config/index');
+const {rechargeApi} = require('./interface')
+
 const fetch = require('node-fetch');
 
-const crypto = require('crypto');
+const crypto = require('./utils/crypto');
 const Big = require('big.js');
 
 const web3 = new Web3(new Web3.providers.WebsocketProvider(wsnetwork));
@@ -34,12 +36,10 @@ contract.events.Transfer({}, {
         const value = event.returnValues.value;
         const hash = event.transactionHash;
 
-        let cipher = crypto.createCipheriv('aes-128-ecb', rechargeKey, rechargeIv);
-        let encryptData = cipher.update(JSON.stringify({
+        let encryptData = crypto.encrypt(JSON.stringify({
             address: to,
             value: value
-        }), "utf-8", "base64");
-        encryptData += cipher.final("base64");
+        }), rechargeKey, rechargeIv);
 
         userService.findByAddress(to)
             .then(user => {
@@ -47,7 +47,7 @@ contract.events.Transfer({}, {
                 if (user !== null && user.uid !== 0) {
                     txService.createTransaction(user.uid, event.transactionHash, new Big(value));
 
-                    return fetch("http://192.168.31.154/index.php/purse/recharge", {
+                    return fetch(rechargeApi, {
                         method: 'POST',
                         body: JSON.stringify({token: encryptData}),
                         headers: {'Content-Type': 'application/json'}
@@ -56,9 +56,9 @@ contract.events.Transfer({}, {
             }).then(res => {
 
             if (res.status === 200) {
-                res.json().then(json =>{
+                res.json().then(json => {
                     console.log(json);
-                    if(json.code === 1) {
+                    if (json.code === 1) {
                         txService.commitTransaction(hash)
                             .then(res => console.log({msg: "状态提交成功", code: json.code}))
                     }
@@ -66,7 +66,7 @@ contract.events.Transfer({}, {
             } else {
                 setTimeout(() => {
                     console.log("再次发送请求");
-                    fetch("http://192.168.31.154/index.php/purse/recharge", {
+                    fetch(rechargeApi, {
                         method: 'POST',
                         body: JSON.stringify({token: encryptData}),
                         headers: {'Content-Type': 'application/json'}
