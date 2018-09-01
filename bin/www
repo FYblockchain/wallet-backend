@@ -9,7 +9,7 @@ var debug = require('debug')('walletbackend:server');
 var http = require('http');
 
 /**
- * Get port from environment and store in Express.
+ * Get PORT from environment and store in Express.
  */
 
 var port = normalizePort(process.env.PORT || '3000');
@@ -22,7 +22,7 @@ app.set('port', port);
 var server = http.createServer(app);
 
 /**
- * Listen on provided port, on all network interfaces.
+ * Listen on provided PORT, on all network interfaces.
  */
 
 server.listen(port);
@@ -30,7 +30,7 @@ server.on('error', onError);
 server.on('listening', onListening);
 
 /**
- * Normalize a port into a number, string, or false.
+ * Normalize a PORT into a number, string, or false.
  */
 
 function normalizePort(val) {
@@ -42,7 +42,7 @@ function normalizePort(val) {
   }
 
   if (port >= 0) {
-    // port number
+    // PORT number
     return port;
   }
 
@@ -85,6 +85,6 @@ function onListening() {
   var addr = server.address();
   var bind = typeof addr === 'string'
     ? 'pipe ' + addr
-    : 'port ' + addr.port;
+    : 'port ' + addr.PORT;
   debug('Listening on ' + bind);
 }

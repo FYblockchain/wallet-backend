@@ -6,7 +6,7 @@ require('./db');
 /**
  * 设置合约监听
  */
-require('./event/watchTransaction');
+// require('./watchTransaction');
 
 /**
  * catch async errors
@@ -20,8 +20,7 @@ require('express-async-errors');
 const createError = require('http-errors');
 const express = require('express');
 const app = express();
-const path = require('path');
-const { port } = require('./config');
+const { PORT } = require('./config');
 
 /**
  * 配置日志
@@ -61,6 +60,8 @@ app.use(express.urlencoded({extended: false}));
  */
 app.use('/users', require('./routes/users'));
 
+app.use('/transactions', require('./routes/transactions'))
+
 /**
  * 捕获404错误
  */
@@ -81,6 +82,6 @@ app.use((err, req, res) => {
     res.fail(err.message);
 });
 
-app.listen(port);
+app.listen(PORT);
 
 module.exports = app;

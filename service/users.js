@@ -8,7 +8,7 @@ const createUser = async (id, address) => {
 const mainAccount = async () => {
     const user = await User.findOne({uid: 0});
     return user.address;
-}
+};
 
 const findById = async (id) => {
     return await User.findOne({uid: id});
@@ -17,6 +17,11 @@ const findById = async (id) => {
 const findByAddress = async (address) => {
     return await User.findOne({address});
 };
+
+const findByTransaction = async (address, transactionHash) => {
+    const user = await findByAddress(address);
+
+}
 
 module.exports = {
     createUser,

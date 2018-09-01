@@ -5,16 +5,16 @@
 const express = require('express');
 const router = express.Router();
 const userService = require('../service/users');
-const {network, mainMne, putForwardIv, putForwardKey} = require('../config');
+const txService = require('../service/transactions');
+const fetch = require('node-fetch');
+const {network, mainMne, putForwardIv, putForwardKey, sendTransactionKey, sendTransactionIv} = require('../config');
 
 /**
- * 配置解密
+ * 配置加解密
  * @type {module:crypto}
  */
 const crypto = require('crypto');
-const decipher = crypto.createDecipheriv('aes-128-ecb', putForwardKey, putForwardIv);
-
-
+const random = require('../utils/randomUtil');
 /**
  * 配置web3和合约信息
  * @type {string}
@@ -71,12 +71,93 @@ router.get('/address/:id', async (req, res, next) => {
 });
 
 /**
+ * 检查address是否存在
+ */
+
+router.get('/checkAddress/:address', async (req, res, next) => {
+    const address = req.params.address;
+    const reg = /^0x.{40}$/;
+    if (!reg.test(address)) throw Error("--------------address无效--------------");
+
+    let findUser;
+    findUser = await userService.findByAddress(address);
+
+    if (findUser !== null) {
+        res.success({address});
+    } else {
+        res.success({address: null});
+    }
+
+});
+
+/**
+ * 添加交易信息
+ */
+router.post("/transactions", async (req, res, next) =>{
+
+    //解密token
+    const token = req.body.token;
+
+    let decipher = crypto.createDecipheriv('aes-128-ecb', sendTransactionKey, sendTransactionIv);
+    let decData = decipher.update(token, "base64", "utf-8");
+    decData += decipher.final();
+    decData = JSON.parse(decData);
+
+    //获取参数
+    let transactionHash, address, value;
+    transactionHash = decData.transactionHash;
+    address = decData.address;
+    value = decData.value;
+
+    //交易持久化
+    const findUser = await userService.findByAddress(address);
+    if(findUser !== null) {
+        await txService.createTransaction(findUser.uid, transactionHash, value);
+        res.success({status: 0})
+    } else {
+        res.fail('no user');
+    }
+});
+
+
+router.post("/transactions/commit", async (req, res, next) =>{
+
+    //解密token
+    const token = req.body.token;
+    let decipher = crypto.createDecipheriv('aes-128-ecb', sendTransactionKey, sendTransactionIv);
+    let decData = decipher.update(token, "base64", "utf-8");
+    decData += decipher.final();
+    decData = JSON.parse(decData);
+
+    //获取参数
+    let transactionHash, address;
+    transactionHash = decData.transactionHash;
+    address = decData.address;
+
+    //交易完成，持久化status
+    const findUser = await userService.findByAddress(address);
+    if(findUser !== null) {
+        const result = await txService.commitTransaction(findUser.uid, transactionHash);
+        if(result) {
+            res.success("提交成功");
+        } else {
+            res.fail("no transaction")
+        }
+
+    } else {
+        res.fail('no user');
+    }
+});
+
+
+/**
  * 提现api
  */
 router.post('/putforward', async (req, res, next) => {
 
     //解析token
     const token = req.body.token;
+    const decipher = crypto.createDecipheriv('aes-128-ecb', putForwardKey, putForwardIv);
     let decData;
     try {
         decData = decipher.update(token, "base64", "utf-8");
@@ -105,10 +186,15 @@ router.post('/putforward', async (req, res, next) => {
     findUser = await userService.findById(id);
     if (findUser === null) throw Error("-----------无法找到该用户id------------");
 
-    res.success("验证成功，开始提现");
+    //用户提现信息加密
+    const cipher = crypto.createCipheriv('aes-128-ecb', putForwardKey, putForwardIv);
+
+    let newToken = cipher.update(JSON.stringify({timestamp: (Date.now() + random.generateRandom()), address: address, value: value}), "utf-8", "base64");
+    newToken += cipher.final("base64");
+    res.success({token: newToken});
+
 
     //子账户转账到主账户
-
     web3.setProvider(new HDWalletProvider(mainMne, network));
     const balance = await contract.methods.balanceOf(findUser.address).call({from: mainAccount});
     console.log(balance);
@@ -132,10 +218,19 @@ router.post('/putforward', async (req, res, next) => {
         throw Error("----------用户账户提现失败--------------");
     }
 
+    fetch("http://192.168.31.154/index.php/purse/cash", {
+        method: 'POST',
+        body: JSON.stringify({token: newToken}),
+        headers: {'Content-Type': 'application/json'}
+    }).then(res => res.json())
+        .then(json => console.log(json))
+        .catch(err => {
+            console.error(err);
+        });
+
 });
 
 module.exports = router;
-
 
 //测试接口
 // router.post("/wallet/recharge/test", async (req, res, next) => {

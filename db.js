@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-mongoose.connect("mongodb://localhost:27017/fanyuProject");
+const {DB_URL} = require('./config');
+mongoose.connect(DB_URL);
 
 const db = mongoose.connection;
 

@@ -9,9 +9,6 @@ const userSchema = new Schema({
     address: {
         type: String
     },
-    privateKey: String,
-    transactionHash: [String]
-    // keyStore: String
 });
 
 const Users = mongoose.model("user", userSchema);
