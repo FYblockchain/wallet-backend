@@ -10,4 +10,14 @@ function encrypt() {
     console.log(encode)
 }
 
-encrypt();
+function encrypt2() {
+    const id = 1;
+    const address = "0x4F111111";
+    const value = 100;
+
+    const encode = crypto.encrypt(JSON.stringify({id : 1, address, value}), putForwardKey, putForwardIv);
+
+    console.log(encode)
+}
+
+encrypt2();

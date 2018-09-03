@@ -24,7 +24,7 @@ router.post("/commitAll", async (req, res, next) => {
     try {
         decData = crypto.decrypt(token, rechargeKey, rechargeIv);
     } catch (e) {
-        throw Error("权限错误");
+        res.fail("权限错误");
     }
 
     const result = await txService.findByStatus(0);

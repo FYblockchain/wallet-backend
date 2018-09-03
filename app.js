@@ -1,6 +1,7 @@
 /**
  * 连接数据库
  */
+
 require('./db');
 
 /**
@@ -12,6 +13,7 @@ require('./db');
  * catch async errors
  */
 require('express-async-errors');
+
 
 /**
  * 配置express，config
@@ -39,14 +41,14 @@ const bodyParser = require('body-parser');
  * 响应处理中间件
  */
 app.use(require("./midware/responseMid"));
-app.use(logger('dev'));
-
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(logger('combined'));
 
 /**
  * post请求body parse json
  */
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
+
 app.use(express.json());
 app.use(express.urlencoded({extended: false}));
 

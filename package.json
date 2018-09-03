@@ -14,7 +14,7 @@
     "express-async-errors": "^3.0.0",
     "hash.js": "^1.1.5",
     "http-errors": "~1.6.2",
-    "mongoose": "^5.2.9",
+    "mongoose": "^5.2.8",
     "morgan": "~1.9.0",
     "node-fetch": "^2.2.0",
     "truffle-hdwallet-provider": "0.0.3",

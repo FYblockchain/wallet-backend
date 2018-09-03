@@ -7,9 +7,8 @@ const router = express.Router();
 const userService = require('../service/users');
 const txService = require('../service/transactions');
 const fetch = require('node-fetch');
-const { network, mainMne, putForwardIv, putForwardKey, sendTransactionKey, sendTransactionIv } = require('../config');
-const { putForwardApi } = require('../interface');
-
+const {network, mainMne, putForwardIv, putForwardKey, sendTransactionKey, sendTransactionIv} = require('../config');
+const {putForwardApi} = require('../interface');
 /**
  * 配置加解密
  * @type {module:crypto}
@@ -26,7 +25,6 @@ const Web3 = require('web3');
 const HDWalletProvider = require("truffle-hdwallet-provider");
 const provider = new HDWalletProvider(mainMne, network);
 const web3 = new Web3(provider);
-
 
 /**
  * 装载主账户
@@ -55,7 +53,10 @@ const contract = new web3.eth.Contract(abi, address);
 router.get('/address/:id', async (req, res, next) => {
     const id = req.params.id;
     const reg = /^[0-9]+$/;
-    if (id == mainAccountIndex || !reg.test(id)) throw Error("--------------id无效--------------");
+    if (id == mainAccountIndex || !reg.test(id)) {
+        res.fail("--------id无效--------");
+        return;
+    }
 
     let findUser;
     findUser = await userService.findById(id);
@@ -77,8 +78,11 @@ router.get('/address/:id', async (req, res, next) => {
 
 router.get('/checkAddress/:address', async (req, res, next) => {
     const address = req.params.address;
-    const reg = /^0x.{40}$/;
-    if (!reg.test(address)) throw Error("--------------address无效--------------");
+    const reg = /^0x[1-9a-fA-F]{40}$/;
+    if (!reg.test(address)) {
+        res.fail("------------address无效------------");
+        return;
+    }
 
     let findUser;
     findUser = await userService.findByAddress(address);
@@ -94,7 +98,7 @@ router.get('/checkAddress/:address', async (req, res, next) => {
 /**
  * 添加交易信息
  */
-router.post("/transactions", async (req, res, next) =>{
+router.post("/transactions", async (req, res, next) => {
 
     //解密token
     const token = req.body.token;
@@ -104,7 +108,8 @@ router.post("/transactions", async (req, res, next) =>{
         decData = crypto.decrypt(token, sendTransactionKey, sendTransactionIv);
         decData = JSON.parse(decData);
     } catch (e) {
-        throw Error("权限错误")
+        res.fail("权限错误");
+        return;
     }
 
     //获取参数
@@ -115,7 +120,7 @@ router.post("/transactions", async (req, res, next) =>{
 
     //交易持久化
     const findUser = await userService.findByAddress(address);
-    if(findUser !== null) {
+    if (findUser !== null) {
         await txService.createTransaction(findUser.uid, transactionHash, value);
         res.success({status: 0})
     } else {
@@ -124,7 +129,7 @@ router.post("/transactions", async (req, res, next) =>{
 });
 
 
-router.post("/transactions/commit", async (req, res, next) =>{
+router.post("/transactions/commit", async (req, res, next) => {
 
     //解密token
     const token = req.body.token;
@@ -133,7 +138,8 @@ router.post("/transactions/commit", async (req, res, next) =>{
         decData = crypto.decrypt(token, sendTransactionKey, sendTransactionIv);
         decData = JSON.parse(decData);
     } catch (e) {
-        throw Error("权限错误")
+        res.fail("权限错误");
+        return;
     }
 
     //获取参数
@@ -143,9 +149,9 @@ router.post("/transactions/commit", async (req, res, next) =>{
 
     //交易完成，持久化status
     const findUser = await userService.findByAddress(address);
-    if(findUser !== null) {
+    if (findUser !== null) {
         const result = await txService.commitTransaction(findUser.uid, transactionHash);
-        if(result) {
+        if (result) {
             res.success("提交成功");
         } else {
             res.fail("no transaction")
@@ -169,7 +175,8 @@ router.post('/putforward', async (req, res, next) => {
         decData = crypto.decrypt(token, putForwardKey, putForwardIv);
         decData = JSON.parse(decData);
     } catch (e) {
-        throw Error("权限错误")
+        res.fail("权限错误");
+        return;
     }
 
     //主账户
@@ -181,18 +188,38 @@ router.post('/putforward', async (req, res, next) => {
     value = decData.value;
     address = decData.address;
 
-    if (!id || !value || !address) throw Error("参数错误");
+    if (!id || !value || !address) {
+        res.fail("参数错误");
+        return;
+    }
 
     //获取用户信息
-    const reg = /^[0-9]+$/;
-    if (id == mainAccountIndex || !reg.test(id)) throw Error("--------------id无效--------------");
+    const idReg = /^[0-9]+$/;
+    const addressReg = /^0x[1-9a-fA-F]{40}$/;
+
+    if (id == mainAccountIndex || !idReg.test(id)) {
+        res.fail("-------------id无效-------------");
+        return;
+    }
+    if (!addressReg.test(address)) {
+        res.fail("-------------address无效-------------");
+        return;
+    }
 
     let findUser;
     findUser = await userService.findById(id);
-    if (findUser === null) throw Error("-----------无法找到该用户id------------");
+    if (findUser === null) {
+        res.fail("-----------无法找到该用户id------------");
+        return;
+    }
 
     //用户提现信息加密
-    const newToken = crypto.encrypt(JSON.stringify({timestamp: (Date.now() + random.generateRandom()), address: address, value: value}), putForwardKey, putForwardIv);
+    const timestamp = Date.now() + random.generateRandom();
+    const newToken = crypto.encrypt(JSON.stringify({
+        timestamp: timestamp,
+        address: address,
+        value: value
+    }), putForwardKey, putForwardIv);
     res.success({token: newToken});
 
 
@@ -207,6 +234,21 @@ router.post('/putforward', async (req, res, next) => {
             console.log("----------将子账户汇入主账户成功-----------");
         }
     } catch (e) {
+        const failToken = crypto.encrypt(JSON.stringify({
+            timestamp: timestamp,
+            address: address,
+            value: value,
+            code: 10000
+        }), putForwardKey, putForwardIv);
+        fetch(putForwardApi, {
+            method: 'POST',
+            body: JSON.stringify({token: failToken}),
+            headers: {'Content-Type': 'application/json'}
+        }).then(res => res.json())
+            .then(json => console.log(json))
+            .catch(err => {
+                console.error(err);
+            });
         throw Error("---------子账户提现失败---------");
     }
 
@@ -217,12 +259,34 @@ router.post('/putforward', async (req, res, next) => {
         console.log("----------从主账户提现到用户账户成功-------");
         // const customerBalance = await contract.methods.balanceOf(address).call({from: mainAccount});
     } catch (e) {
+        const failToken = crypto.encrypt(JSON.stringify({
+            timestamp: timestamp,
+            address: address,
+            value: value,
+            code: 10000
+        }), putForwardKey, putForwardIv);
+        fetch(putForwardApi, {
+            method: 'POST',
+            body: JSON.stringify({token: failToken}),
+            headers: {'Content-Type': 'application/json'}
+        }).then(res => res.json())
+            .then(json => console.log(json))
+            .catch(err => {
+                console.error(err);
+            });
         throw Error("----------用户账户提现失败--------------");
     }
 
+    const successToken = crypto.encrypt(JSON.stringify({
+        timestamp: timestamp,
+        address: address,
+        value: value,
+        code: 200
+    }), putForwardKey, putForwardIv);
+
     fetch(putForwardApi, {
         method: 'POST',
-        body: JSON.stringify({token: newToken}),
+        body: JSON.stringify({token: successToken}),
         headers: {'Content-Type': 'application/json'}
     }).then(res => res.json())
         .then(json => console.log(json))
